@@ -39,6 +39,8 @@ type LockManager struct {
 	logger      log.Logger
 	leaseTTL    time.Duration
 	idGenerator func() int
+	waitLock    bool
+	waitgroup   group
 }
 
 // Option is the option to change LockManager behavior.
@@ -93,6 +95,12 @@ func (l *LockManager) Lock(ctx context.Context, key string) (unlock func(), err 
 	succeed, err := l.client.SetNX(ctx, lockKey, lockValue, l.leaseTTL).Result()
 	if err != nil {
 		return nil, fmt.Errorf("lock %s failed: %w", lockKey, err)
+	}
+	if l.waitLock {
+		_, err := l.waitgroup.addWithContext(ctx, lockKey)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if !succeed {
 		return nil, ErrLockHeld
